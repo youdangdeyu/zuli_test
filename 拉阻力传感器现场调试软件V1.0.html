@@ -1,0 +1,2400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 转换阻力传感器调试工具</title>
+    <style>
+        *{box-sizing: border-box;margin:0;padding:0;}
+        body{padding:10px;font-size:16px;width:100%;min-height:100vh;background:#f5f5f5;}
+        .fixed-header{position:fixed;top:0;left:0;right:0;padding:10px;background:#f5f5f5;z-index:100;box-shadow:0 2px 4px rgba(0,0,0,0.1);max-height:50vh;overflow-y:auto;}
+        .btn{padding:12px 16px;margin:4px;border:none;border-radius:8px;background:#2196F3;color:#fff;font-size:16px;flex:1;min-width:80px;}
+        .btn:disabled{background:#ccc;}
+        .btn-area{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;}
+        .row{margin:1px 0;display:flex;flex-wrap:wrap;align-items:center;gap:5px;}
+        #recvBox{border:1px solid #ddd;height:280px;padding:10px;margin:10px 0;overflow:auto;white-space:pre-wrap;font-size:14px;background:#fff;border-radius:8px;}
+        .send-area{display:flex;gap:5px;margin:10px 0;}
+        #sendInput{flex:1;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:16px;}
+        label{cursor:pointer;font-size:15px;}
+        .cb-label{display:flex;align-items:center;gap:2 !important;margin-right:15 !important;border:0 !important;}
+        .cb-label input[type="checkbox"],
+        .cb-label input[type="radio"]{margin:0 !important;padding:0 !important;border:0 !important;width:auto !important;height:auto !important;position:relative;top:1px;margin-right:5px !important;}
+        #mainUnitLabel,#zeroUnitLabel{display:inline-block;width:28px;text-align:left;}
+        #mainLabel,#zeroLabel{display:inline-block;width:70px;text-align:left;}
+        #readInput,#zeroInput,#tempInput,#intervalInput{width:65px;}
+        #resetBtn,#timeSetBtn,#timeGetBtn{flex:1;}
+        #appVersionInput,#bootVersionInput,#hardwareVersionInput,#appAdressInput{width:300px;}
+        .version-label{display:inline-block;width:80px;text-align:left;}
+        .progress-container{flex:1;height:20px;background:#e0e0e0;border-radius:10px;overflow:hidden;margin:0 10px;}
+        .progress-bar{height:100%;background:#4CAF50;width:0%;transition:width 0.3s ease;}
+        #mainUnitLabel + label,
+        #zeroUnitLabel + label{display:inline-block;width:30px;text-align:center;}
+        .cb-label span{margin-left:2px;}
+        .temp-comp-cb{margin-left:30px !important;}
+        .title{font-size:18px;text-align:center;color:blue;}
+        .custom-alert-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000;}
+        .custom-alert{background:#fff;border-radius:8px;width:280px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.2);}
+        .custom-alert-header{background:#4CAF50;color:white;padding:12px 16px;font-weight:bold;text-align:center;font-size:16px;}
+        .custom-alert-body{padding:20px 16px;text-align:center;font-size:14px;color:#333;}
+        .custom-alert-footer{padding:12px 16px;text-align:center;border-top:1px solid #eee;}
+        .custom-alert-btn{background:#4CAF50;color:white;border:none;padding:8px 24px;border-radius:4px;cursor:pointer;font-size:14px;}
+        .custom-alert-btn:hover{background:#45a049;}
+        .curve-area{display:none;margin-top:10px;padding:10px;background:#fff;border-radius:8px;border:1px solid #ddd;}
+        #curveCanvas{width:100%;max-width:100%;display:block;}
+        #tempCurveCanvas{width:100%;max-width:100%;display:block;}
+        .curve-title{font-size:14px;font-weight:bold;margin-bottom:5px;color:#333;}
+        .read-area{display:flex;flex-direction:column;gap:10px;margin:12px 0;}
+        .read-area input[type="text"]{width:100px;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;text-align:center;}
+        .read-area .btn{flex:none;min-width:60px;padding:10px 14px;font-size:14px;}
+        @media screen and (max-width: 480px) {
+            body{padding:8px;font-size:14px;}
+            .btn{padding:10px 12px;font-size:14px;}
+            #recvBox{height:180px;font-size:13px;}
+            .row{gap:8px;}
+            label{font-size:13px;}
+            .read-area input[type="text"]{width:80px;padding:8px;font-size:13px;}
+        }
+    </style>
+</head>
+<body>
+    <div class="fixed-header">
+        <div class="btn-area">
+            <button id="scanBtn" class="btn">连接蓝牙</button>
+            <button id="disconnectBtn" class="btn" disabled>断开连接</button>
+            <button id="clearBtn" class="btn">清空接收</button>
+        </div>
+        
+        <div class="row">
+            <label><input type="radio" name="recvMode" value="text" checked> 文本显示</label>
+            <label><input type="radio" name="recvMode" value="hex"> 16进制显示</label>
+        </div>
+        <div id="recvBox"></div>
+    </div>
+
+    
+
+    <!---hr style="border:none;border-top:1px solid #ddd;margin:15px 0;"--->
+    <hr style="border:none;border-top:2mm ridge rgb(211 220 50 / 0.6);margin:15px 0;">
+
+    <div class="read-area">
+        <div class="title">设置功能</div>
+        <div class="row">
+            <button id="resetBtn" class="btn" disabled>复位传感器</button>
+            <button id="timeSetBtn" class="btn" disabled>校时</button>
+            <button id="timeGetBtn" class="btn" disabled>获取时间</button>
+        </div>
+        
+    </div>
+
+    <!---hr style="border:none;border-top:1px solid #ddd;margin:15px 0;"-->
+    <hr style="border:none;border-top:2mm ridge rgb(211 220 50 / 0.6);margin:15px 0;">
+
+    <div class="read-area">
+        <div class="title">传感器版本管理功能</div>
+        <div class="row">
+            <label class="version-label">app版本：</label>
+            <input type="text" id="appVersionInput" placeholder="0.0.0" readonly>
+        </div>
+        <div class="row">
+            <label class="version-label">boot版本：</label>
+            <input type="text" id="bootVersionInput" placeholder="0.0.0" readonly>
+        </div>
+        <div class="row">
+            <label class="version-label">硬件版本：</label>
+            <input type="text" id="hardwareVersionInput" placeholder="0.0.0" readonly>
+        </div>
+        <div class="row">
+            <label class="version-label">文件路径：</label>
+            <input type="text" id="appAdressInput" placeholder="app文件路径" readonly>
+        </div>
+        <div class="row">
+            <label class="version-label">更新进度：</label>
+            <div class="progress-container" style="flex:1;">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <span id="progressText">0%</span>
+        </div>
+        <div class="row version-row">
+            <button id="readVersionBtn" class="btn" style="flex:1;min-width:0;" disabled>读取版本</button>
+            <button id="openAppBtn" class="btn" style="flex:1;min-width:0;">打开app</button>
+            <button id="updateBtn" class="btn" style="flex:1;min-width:0;" disabled>更新</button>
+        </div>
+    </div>
+
+    
+
+    <!---hr style="border:none;border-top:1px solid #ddd;margin:15px 0;"--->
+    <hr style="border:none;border-top:2mm ridge rgb(211 220 50 / 0.6);margin:15px 0;">
+
+    <div class="read-area">
+        <div class="title">读取功能</div>
+        <div class="row">
+            <label>数据格式：</label>
+            <label class="cb-label"><input type="radio" name="dataFormat" value="force" checked id="forceRadio"> 转换力</label>
+            <label class="cb-label"><input type="radio" name="dataFormat" value="voltage" id="voltageRadio"> 电压值</label>
+            <!-- <label class="cb-label temp-comp-cb"><input type="checkbox" id="disableTempCompCb"> 禁用温补</label> -->
+            <label class="cb-label"><input type="checkbox" id="setZeroCb"> 设置零点</label>
+        </div>
+        <div class="row">
+            <label id="mainLabel">转换力：</label>
+            <input type="text" id="readInput" placeholder="0" value="1.0" readonly >
+            <label id="mainUnitLabel"> N</label>
+            <label>|</label>
+            <label>温度值：</label>
+            <input type="text" id="tempInput" placeholder="25.0" readonly>
+            <label>℃</label>
+        </div>
+        <div class="row">
+            <label id="zeroLabel">零点值：</label>
+            <input type="text" id="zeroInput" placeholder="0.0" readonly>
+            <label id="zeroUnitLabel">uV</label>
+            <label>|</label>
+            <label>间隔值：</label>
+            <input type="text" id="intervalInput" placeholder="0.0" value="1.0">
+            <label>s</label>
+        </div>
+        <div class="row">
+            <button id="readOnceBtn" class="btn" style="flex:1;min-width:0;" disabled>单次读取</button>
+            <button id="cycleBtn" class="btn" style="flex:1;min-width:0;" disabled>周期</button>
+            <button id="readZeroBtn" class="btn" style="flex:1;min-width:0;" disabled>读零点</button>
+        </div>
+        
+    </div>
+
+    <!---hr style="border:none;border-top:1px solid #ddd;margin:15px 0;"--->
+    <hr style="border:none;border-top:2mm ridge rgb(211 220 50 / 0.6);margin:15px 0;">
+
+    <div class="read-area">
+        <div class="title">调整功能</div>
+        <div class="row">
+            <label>拉入零偏：</label>
+            <input type="text" id="laRuZeroInput" placeholder="0" value="0">
+            <label>N</label>
+            <label>拉入倍数：</label>
+            <input type="text" id="laRuMulInput" placeholder="1.0" value="1.00">
+        </div>
+        <div class="row">
+            <label>伸出零偏：</label>
+            <input type="text" id="shenChuZeroInput" placeholder="0" value="0">
+            <label>N</label>
+            <label>伸出倍数：</label>
+            <input type="text" id="shenChuMulInput" placeholder="1.0" value="1.00">
+        </div>
+        <div class="row">
+            <button id="adjustSendBtn" class="btn" style="flex:1;min-width:0;" disabled>调整</button>
+            <button id="adjustReadBtn" class="btn" style="flex:1;min-width:0;" disabled>读取</button>
+        </div>
+    </div>
+
+    <!---hr style="border:none;border-top:1px solid #ddd;margin:15px 0;"--->
+    <hr style="border:none;border-top:2mm ridge rgb(211 220 50 / 0.6);margin:15px 0;">
+
+    <div class="read-area">
+        <div class="title">校准功能</div>
+        <!-- 拉入低采样行，已隐藏
+        <div class="row">
+            <label>拉入低采样：</label>
+            <input type="text" id="laRuLowInput"  value="0" readonly>
+            <label>uV</label>
+            <button id="laRuLowBtn" class="btn">填入</button>
+        </div>  -->
+        <!-- 拉入低表显行，已隐藏
+        <div class="row">
+            <label>拉入低表显：</label>
+            <input type="text" id="laRuLowDisInput"  value="0" readonly>
+            <label>N</label>
+        </div> -->
+        <div class="row">
+            <label>拉入高采样：</label>
+            <input type="text" id="laRuHightInput"  value="-150">
+            <label>uV</label>
+            <button id="laRuHightBtn" class="btn">填入</button>
+        </div>  
+        <div class="row">
+            <label>拉入高表显：</label>
+            <input type="text" id="laRuHightDisInput"  value="-15000">
+            <label>N</label>
+        </div>
+        <!-- 伸出低采样行，已隐藏
+        <div class="row">
+            <label>伸出低采样：</label>
+            <input type="text" id="shenChuLowInput"  value="0" readonly>
+            <label>uV</label>
+            <button id="shenChuLowBtn" class="btn">填入</button>
+        </div>
+        -->
+        <!-- 伸出低表显行，已隐藏
+        <div class="row">
+            <label>伸出低表显：</label>
+            <input type="text" id="shenChuLowDisInput"  value="0" readonly>
+            <label>N</label>
+        </div> -->
+        <div class="row">
+            <label>伸出高采样：</label>
+            <input type="text" id="shenChuHightInput"  value="150">
+            <label>uV</label>
+            <button id="shenChuHightBtn" class="btn">填入</button>
+        </div>  
+        <div class="row">
+            <label>伸出高表显：</label>
+            <input type="text" id="shenChuHightDisInput"  value="15000">
+            <label>N</label>
+        </div>
+        <div class="row">
+            <button id="caliSendBtn" class="btn" style="flex:1;min-width:0;" disabled>校准</button>
+            <button id="caliReadBtn" class="btn" style="flex:1;min-width:0;" disabled>读取</button>
+        </div>
+    </div>
+
+    <!---hr style="border:none;border-top:1px solid #ddd;margin:15px 0;"--->
+    <hr style="border:none;border-top:2mm ridge rgb(211 220 50 / 0.6);margin:15px 0;">
+
+    <div class="read-area">
+        <div class="title">恢复出厂参数</div>
+        <div class="row">
+            <button id="defaultBtn" class="btn" style="flex:1;min-width:0;" disabled>恢复出厂参数</button>
+        </div>
+    </div>
+
+    <!---hr style="border:none;border-top:1px solid #ddd;margin:15px 0;"--->
+    <hr style="border:none;border-top:2mm ridge rgb(211 220 50 / 0.6);margin:15px 0;">
+
+    <div class="read-area">
+        <div class="title">发送功能</div>
+        <div class="row">
+            <label><input type="radio" name="sendMode" value="text" checked> 文本发送</label>
+            <label><input type="radio" name="sendMode" value="hex"> 16进制发送</label>
+        </div>
+        <div class="row">
+            <label>十六进制用空格分隔 例:48 65 6C 6C 6F</label>
+        </div>
+        <div class="row">
+            <input type="text" id="sendInput" placeholder="输入发送内容">
+            <button id="sendBtn" class="btn" disabled>发送</button>
+        </div>
+    </div>
+
+    <!---hr style="border:none;border-top:thick double #ddd;margin:15px 0;"--->
+    <hr style="border:none;border-top:2mm ridge rgb(211 220 50 / 0.6);margin:15px 0;">
+
+    <div class="read-area">
+        <div class="title">曲线功能</div>
+        <div class="row">
+            <button id="realcurveBtn" class="btn" style="flex:1;min-width:0;" disabled>实时曲线</button>
+            <button id="secCurveBtn" class="btn" style="flex:1;min-width:0;" disabled>秒帧曲线</button>
+        </div>
+        <div class="curve-area" id="curveArea">
+            <div id="sampleCurveContainer">
+                <div class="curve-title">采样值曲线 (N)</div>
+                <canvas id="curveCanvas" width="800" height="250"></canvas>
+            </div>
+            <div id="tempCurveContainer" style="display:none;">
+                <div class="curve-title">温度曲线 (℃)</div>
+                <canvas id="tempCurveCanvas" width="800" height="150"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="custom-alert-overlay" id="customAlertOverlay">
+        <div class="custom-alert">
+            <div class="custom-alert-header">提示</div>
+            <div class="custom-alert-body" id="customAlertBody"></div>
+            <div class="custom-alert-footer">
+                <button class="custom-alert-btn" id="customAlertBtn">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 动态设置body的padding-top，使其等于fixed-header的高度
+        function updateBodyPadding() {
+            const fixedHeader = document.querySelector('.fixed-header');
+            const headerHeight = fixedHeader.offsetHeight;
+            document.body.style.paddingTop = headerHeight + 'px';
+        }
+        
+        // 页面加载时设置
+        window.addEventListener('load', updateBodyPadding);
+        // 窗口大小改变时更新
+        window.addEventListener('resize', updateBodyPadding);
+        
+        const BLE_SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
+        const BLE_CHAR_UUID_NOTIFY = "0000fff1-0000-1000-8000-00805f9b34fb";
+        const BLE_CHAR_UUID_WRITE = "0000fff2-0000-1000-8000-00805f9b34fb";
+        let notifyChar = null;
+        let writeChar = null;
+        let lastSendCommandData = null;
+
+        let device = null, server = null, characteristic = null;
+        const recvBox = document.getElementById("recvBox");
+        const scanBtn = document.getElementById("scanBtn");
+        const disconnectBtn = document.getElementById("disconnectBtn");
+        const sendBtn = document.getElementById("sendBtn");
+        const clearBtn = document.getElementById("clearBtn");
+        const readOnceBtn = document.getElementById("readOnceBtn");
+        const sendInput = document.getElementById("sendInput");
+        const readInput = document.getElementById("readInput");
+        const tempInput = document.getElementById("tempInput");
+        const zeroInput = document.getElementById("zeroInput");
+        const laRuLowBtn = document.getElementById("laRuLowBtn");
+        const laRuLowInput = document.getElementById("laRuLowInput");
+        const forceRadio = document.getElementById("forceRadio");
+        const voltageRadio = document.getElementById("voltageRadio");
+        const mainLabel = document.getElementById("mainLabel");
+        const mainUnitLabel = document.getElementById("mainUnitLabel");
+        const laRuHightBtn = document.getElementById("laRuHightBtn");
+        const laRuHightInput = document.getElementById("laRuHightInput");
+        const shenChuLowBtn = document.getElementById("shenChuLowBtn");
+        const shenChuLowInput = document.getElementById("shenChuLowInput");
+        const shenChuHightBtn = document.getElementById("shenChuHightBtn");
+        const shenChuHightInput = document.getElementById("shenChuHightInput");
+        const realcurveBtn = document.getElementById("realcurveBtn");
+
+        // 日志输出
+        function log(msg) {
+            recvBox.textContent += msg + "\n";
+            recvBox.scrollTop = recvBox.scrollHeight;
+        }
+
+        // 带颜色的日志输出（颜色保持，不恢复）
+        function logColor(msg, color) {
+            const span = document.createElement("span");
+            span.style.color = color;
+            span.textContent = msg + "\n";
+            recvBox.appendChild(span);
+            recvBox.scrollTop = recvBox.scrollHeight;
+        }
+
+        // 字节转十六进制字符串
+        function bufToHex(buf) {
+            let uint8Array;
+            if (buf instanceof Uint8Array) {
+                uint8Array = buf;
+            } else if (buf instanceof ArrayBuffer) {
+                uint8Array = new Uint8Array(buf);
+            } else if (buf.buffer && buf.byteOffset !== undefined && buf.byteLength !== undefined) {
+                uint8Array = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+            } else {
+                return "❌ 无效数据格式";
+            }
+            return Array.from(uint8Array)
+                .map(b => b.toString(16).padStart(2, '0').toUpperCase())
+                .join(' ');
+        }
+
+        // 十六进制字符串转字节数组
+        function hexToBuf(hexStr) {
+            const arr = hexStr.trim().split(/\s+/).filter(item => item);
+            return new Uint8Array(arr.map(h => parseInt(h, 16)));
+        }
+
+        // 解析帧数据
+        function parseFrame(rawData) {
+            const frame = {
+                valid: false,
+                frameHeader: null,
+                functionCode: null,
+                dataLength: null,
+                data: null,
+                checksum: null,
+                frameTail: null,
+                error: null
+            };
+
+            if (!rawData || rawData.length < 8) {
+                frame.error = "数据长度不足";
+                return frame;
+            }
+
+            const headerStart = findFrameStart(rawData);
+            if (headerStart === -1) {
+                frame.error = "未找到帧头";
+                return frame;
+            }
+
+            const dataView = rawData instanceof Uint8Array ? rawData : new Uint8Array(rawData);
+            const startIdx = headerStart;
+
+            if (startIdx + 8 > dataView.length) {
+                frame.error = "数据长度不足";
+                return frame;
+            }
+
+            frame.frameHeader = [dataView[startIdx], dataView[startIdx + 1]];
+            if (frame.frameHeader[0] !== 0x26 || frame.frameHeader[1] !== 0x23) {
+                frame.error = "帧头错误";
+                return frame;
+            }
+
+            const funcLow = dataView[startIdx + 2];
+            const funcHigh = dataView[startIdx + 3];
+            frame.functionCode = (funcHigh << 8) | funcLow;
+            frame.dataLength = dataView[startIdx + 4];
+
+            const expectedFrameLength = 7 + frame.dataLength;
+            if (startIdx + expectedFrameLength > dataView.length) {
+                frame.error = `数据不完整，期望长度 ${expectedFrameLength}，实际长度 ${dataView.length - startIdx}`;
+                return frame;
+            }
+
+            frame.data = [];
+            for (let i = 0; i < frame.dataLength; i++) {
+                frame.data.push(dataView[startIdx + 5 + i]);
+            }
+
+            frame.checksum = dataView[startIdx + 5 + frame.dataLength];
+            frame.frameTail = dataView[startIdx + 5 + frame.dataLength + 1];
+
+            if (frame.frameTail !== 0x24) {
+                frame.error = `帧尾错误，期望 0x24，实际 0x${frame.frameTail.toString(16).toUpperCase()}`;
+                return frame;
+            }
+
+            let calcChecksum = 0;
+            for (let i = 2; i < 5 + frame.dataLength; i++) {
+                calcChecksum += dataView[startIdx + i];
+            }
+            calcChecksum &= 0xFF;
+
+            if (calcChecksum !== frame.checksum) {
+                frame.error = `校验和错误，期望 0x${calcChecksum.toString(16).toUpperCase()}，实际 0x${frame.checksum.toString(16).toUpperCase()}`;
+                return frame;
+            }
+
+            frame.valid = true;
+            return frame;
+        }
+
+        function findFrameStart(data) {
+            const arr = data instanceof Uint8Array ? data : new Uint8Array(data);
+            for (let i = 0; i < arr.length - 1; i++) {
+                if (arr[i] === 0x26 && arr[i + 1] === 0x23) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        // 解析0x5001帧数据
+        function parse5001Data(data) {
+            const result = {
+                tempRate: null,
+                tempRateBinary: null,
+                tempValue: null,
+                zero: null,
+                sampleValue: null,
+                flag: null
+            };
+
+            if (!data || data.length < 11) {
+                return result;
+            }
+
+            result.tempRate = (data[3] / 10).toFixed(1);
+
+            result.tempRateBinary = [];
+            const flag = data[2];
+            result.flag = flag;
+            for (let i = 7; i >= 0; i--) {
+                result.tempRateBinary.push((flag >> i) & 1);
+            }
+
+            if (data.length >= 11) {
+                const tempArray = new Int16Array(new Uint8Array([data[9], data[10]]).buffer);
+                result.tempValue = (tempArray[0] / 10).toFixed(1);
+            }
+            
+            if (data.length >= 13) {
+                const tempArray = new Int16Array(new Uint8Array([data[11], data[12]]).buffer);
+                result.zero = tempArray[0];
+            }
+
+            if (data.length >= 17) {
+                const sampleArray = new Int32Array(new Uint8Array([data[13], data[14], data[15], data[16]]).buffer);
+                result.sampleValue = sampleArray[0];
+            }
+
+            return result;
+        }
+
+        // 组帧函数
+        function framing(functionCode, dataArray, dataLength) {
+            const frame = [];
+            frame.push(0x26);
+            frame.push(0x23);
+            
+            const funcLow = functionCode & 0xFF;
+            const funcHigh = (functionCode >> 8) & 0xFF;
+            frame.push(funcLow);
+            frame.push(funcHigh);
+            
+            frame.push(dataLength);
+            
+            for (let i = 0; i < dataLength && i < dataArray.length; i++) {
+                frame.push(dataArray[i] & 0xFF);
+            }
+            
+            let checksum = 0;
+            for (let i = 2; i < frame.length; i++) {
+                checksum += frame[i];
+            }
+            checksum = checksum & 0xFF;
+            frame.push(checksum);
+            frame.push(0x24);
+            
+            return new Uint8Array(frame);
+        }
+
+        // 自定义提示框
+        const customAlertOverlay = document.getElementById("customAlertOverlay");
+        const customAlertBody = document.getElementById("customAlertBody");
+        const customAlertBtn = document.getElementById("customAlertBtn");
+        
+        function showAlert(message) {
+            customAlertBody.textContent = message;
+            customAlertOverlay.style.display = "flex";
+        }
+        
+        customAlertBtn.onclick = () => {
+            customAlertOverlay.style.display = "none";
+        };
+        
+        // 点击遮罩层关闭
+        customAlertOverlay.onclick = (e) => {
+            if (e.target === customAlertOverlay) {
+                customAlertOverlay.style.display = "none";
+            }
+        };
+
+        // 清空接收
+        clearBtn.onclick = () => recvBox.textContent = "";
+
+        // 拉入低采样填入按钮（对应控件已隐藏，绑定屏蔽）
+        if (laRuLowBtn) {
+            laRuLowBtn.onclick = () => {
+                if (forceRadio.checked) {
+                    showAlert("需要在电压值格式下输入");
+                    return;
+                }
+                const value = readInput.value.trim();
+                log("当前读取值：" + value);
+                if (value && laRuLowInput) {
+                    laRuLowInput.value = value;
+                    log("→ 将读取值填入拉入低采样：" + value);
+                } else {
+                    log("⚠️ 读取值为空，请先读取数据");
+                }
+            };
+        }
+
+        // 拉入高采样填入按钮
+        laRuHightBtn.onclick = () => {
+            if (forceRadio.checked) {
+                showAlert("需要在电压值格式下输入");
+                return;
+            }
+            const value = readInput.value.trim();
+            if (value) {
+                laRuHightInput.value = value;
+                log("→ 将读取值填入拉入高采样：" + value);
+            } else {
+                log("⚠️ 读取值为空，请先读取数据");
+            }
+        };
+
+        // 伸出低采样填入按钮（对应控件已隐藏，绑定屏蔽）
+        if (shenChuLowBtn) {
+            shenChuLowBtn.onclick = () => {
+                if (forceRadio.checked) {
+                    showAlert("需要在电压值格式下输入");
+                    return;
+                }
+                const value = readInput.value.trim();
+                if (value && shenChuLowInput) {
+                    shenChuLowInput.value = value;
+                    log("→ 将读取值填入伸出低采样：" + value);
+                } else {
+                    log("⚠️ 读取值为空，请先读取数据");
+                }
+            };
+        }
+
+        // 伸出高采样填入按钮
+        shenChuHightBtn.onclick = () => {
+            if (forceRadio.checked) {
+                showAlert("需要在电压值格式下输入");
+                return;
+            }
+            const value = readInput.value.trim();
+            if (value) {
+                shenChuHightInput.value = value;
+                log("→ 将读取值填入伸出高采样：" + value);
+            } else {
+                log("⚠️ 读取值为空，请先读取数据");
+            }
+        };
+
+        // 数据格式切换功能
+        function updateDataFormatDisplay() {
+            const isForce = forceRadio.checked;
+            if (isForce) {
+                mainLabel.textContent = "转换力：";
+                mainUnitLabel.textContent = "N";
+            } else {
+                mainLabel.textContent = "电压值：";
+                mainUnitLabel.textContent = "uV";
+            }
+        }
+
+        forceRadio.addEventListener('change', function() {
+            updateDataFormatDisplay();
+            if (this.checked && device) {
+                lastSendCommandData = 0x01;
+                log("→ 发送读取命令(功能码0x700A): " + lastSendCommandData);
+                const frame = framing(0x700A, [0x01], 1);
+                bleWrite(frame);
+            }
+        });
+        
+        voltageRadio.addEventListener('change', function() {
+            updateDataFormatDisplay();
+            if (this.checked && device) {
+                lastSendCommandData = 0x00;
+                log("→ 发送读取命令(功能码0x700A): " + lastSendCommandData);
+                const frame = framing(0x700A, [0x00], 1);
+                bleWrite(frame);
+            }
+        });
+        
+        updateDataFormatDisplay();
+
+        // 设置零点复选框
+        const setZeroCb = document.getElementById("setZeroCb");
+        setZeroCb.addEventListener('change', function() {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                this.checked = !this.checked;
+                return;
+            }
+            const data = this.checked ? 0x01 : 0x00;
+            const frame = framing(0x7007, [data], 1);
+            log("→ 发送设置零点命令(功能码0x7007): " + bufToHex(frame));
+            bleWrite(frame);
+        });
+
+        // 校准发送按钮
+        const caliSendBtn = document.getElementById("caliSendBtn");
+        caliSendBtn.onclick = () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            
+            const laRuLowEl = document.getElementById("laRuLowInput");
+            if (!laRuLowEl) {
+                log("❌ 拉入低采样输入框已隐藏，默认为零");
+                //return;
+                
+            }
+            const laRuLow = 0;
+            const laRuLowDis = 0;
+            const shenChuLow = 0;
+            const shenChuLowDis = 0;
+            //const laRuLow = parseFloat(laRuLowEl.value);
+            //const laRuLowDis = parseFloat(document.getElementById("laRuLowDisInput").value);
+            const laRuHight = parseFloat(document.getElementById("laRuHightInput").value);
+            const laRuHightDis = parseFloat(document.getElementById("laRuHightDisInput").value);
+            //const shenChuLow = parseFloat(document.getElementById("shenChuLowInput").value);
+            //const shenChuLowDis = parseFloat(document.getElementById("shenChuLowDisInput").value);
+            const shenChuHight = parseFloat(document.getElementById("shenChuHightInput").value);
+            const shenChuHightDis = parseFloat(document.getElementById("shenChuHightDisInput").value);
+            
+            const laRuLowInt = Math.round(laRuLow * 10);
+            const laRuLowDisInt = Math.round(laRuLowDis);
+            const laRuHightInt = Math.round(laRuHight * 10);
+            const laRuHightDisInt = Math.round(laRuHightDis);
+            const shenChuLowInt = Math.round(shenChuLow * 10);
+            const shenChuLowDisInt = Math.round(shenChuLowDis);
+            const shenChuHightInt = Math.round(shenChuHight * 10);
+            const shenChuHightDisInt = Math.round(shenChuHightDis);
+            
+            if (isNaN(laRuLowInt) || isNaN(laRuLowDisInt) || isNaN(laRuHightInt) || isNaN(laRuHightDisInt) ||
+                isNaN(shenChuLowInt) || isNaN(shenChuLowDisInt) || isNaN(shenChuHightInt) || isNaN(shenChuHightDisInt)) {
+                showAlert("数据格式不符合");
+                log("数据格式不符合,无校准数据");
+                return;
+            }
+            
+            if (laRuLowInt > 0 || laRuLowDisInt > 0 || laRuHightInt > 0 || laRuHightDisInt > 0) {
+                showAlert("数据格式不符合");
+                log("数据格式不符合,拉力数据错误");
+                return;
+            }
+            
+            if (shenChuLowInt < 0 || shenChuLowDisInt < 0 || shenChuHightInt < 0 || shenChuHightDisInt < 0) {
+                showAlert("数据格式不符合");
+                log("数据格式不符合,伸出数据错误");
+                return;
+            }
+            
+            const dataArray = [];
+            
+            function intToBytesLE(value, bytes) {
+                for (let i = 0; i < bytes; i++) {
+                    dataArray.push((value >> (8 * i)) & 0xFF);
+                }
+            }
+            
+            intToBytesLE(laRuLowInt, 4);
+            intToBytesLE(laRuLowDisInt, 4);
+            intToBytesLE(laRuHightInt, 4);
+            intToBytesLE(laRuHightDisInt, 4);
+            intToBytesLE(shenChuLowInt, 4);
+            intToBytesLE(shenChuLowDisInt, 4);
+            intToBytesLE(shenChuHightInt, 4);
+            intToBytesLE(shenChuHightDisInt, 4);
+            
+            if (!confirm("确定要发送校准参数？点击确认后将更新设备校准参数！")) {
+                return;
+            }
+            
+            const frame = framing(0x7003, dataArray, 32);
+            log("→ 发送校准命令(功能码0x7003): " + bufToHex(frame));
+            bleWrite(frame);
+        };
+
+        // 校准读取按钮
+        const caliReadBtn = document.getElementById("caliReadBtn");
+        caliReadBtn.onclick = () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            const frame = framing(0x7004, [], 0);
+            log("→ 发送读取校准参数命令(功能码：0x7004): " + bufToHex(frame));
+            bleWrite(frame);
+        };
+
+        // 调整发送按钮
+        const adjustSendBtn = document.getElementById("adjustSendBtn");
+        adjustSendBtn.onclick = () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            
+            const laRuZero = parseFloat(document.getElementById("laRuZeroInput").value);
+            const laRuMul = parseFloat(document.getElementById("laRuMulInput").value);
+            const shenChuZero = parseFloat(document.getElementById("shenChuZeroInput").value);
+            const shenChuMul = parseFloat(document.getElementById("shenChuMulInput").value);
+            
+            const laRuZeroInt = Math.round(laRuZero);
+            const laRuMulInt = Math.round(laRuMul * 100);
+            const shenChuZeroInt = Math.round(shenChuZero);
+            const shenChuMulInt = Math.round(shenChuMul * 100);
+            
+            if (isNaN(laRuZeroInt) || isNaN(laRuMulInt) || isNaN(shenChuZeroInt) || isNaN(shenChuMulInt)) {
+                showAlert("数据格式不正确");
+                return;
+            }
+            
+            if (laRuZeroInt < -15000 || laRuZeroInt > 15000) {
+                showAlert("数据格式不正确");
+                return;
+            }
+            
+            if (laRuMul < 0.01 || laRuMul > 100) {
+                showAlert("数据格式不正确");
+                return;
+            }
+            
+            if (shenChuZeroInt < -15000 || shenChuZeroInt > 15000) {
+                showAlert("数据格式不正确");
+                return;
+            }
+            
+            if (shenChuMul < 0.01 || shenChuMul > 100) {
+                showAlert("数据格式不正确");
+                return;
+            }
+            
+            const dataArray = [];
+            
+            function intToBytesLE(value, bytes) {
+                for (let i = 0; i < bytes; i++) {
+                    dataArray.push((value >> (8 * i)) & 0xFF);
+                }
+            }
+            
+            intToBytesLE(laRuZeroInt, 4);
+            intToBytesLE(laRuMulInt, 4);
+            intToBytesLE(shenChuZeroInt, 4);
+            intToBytesLE(shenChuMulInt, 4);
+            
+            if (!confirm("确定要发送调整参数？点击确认后将更新设备调整参数！")) {
+                return;
+            }
+            
+            const frame = framing(0x700D, dataArray, 16);
+            log("→ 发送调整命令(功能码0x700D): " + bufToHex(frame));
+            bleWrite(frame);
+        };
+
+        // 调整读取按钮
+        const adjustReadBtn = document.getElementById("adjustReadBtn");
+        adjustReadBtn.onclick = () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            const frame = framing(0x700E, [], 0);
+            log("→ 发送读取调整参数命令(功能码：0x700E): " + bufToHex(frame));
+            bleWrite(frame);
+        };
+
+        // 读取版本按钮
+        const readVersionBtn = document.getElementById("readVersionBtn");
+        readVersionBtn.onclick = () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            const frame = framing(0x40A1, [], 0);
+            log("→ 发送读取版本命令(功能码0x40A1): " + bufToHex(frame));
+            bleWrite(frame);
+        };
+
+        // CRC16计算函数
+        function crc16(data) {
+            let crc = 0xFFFF;
+            const polynomial = 0xA001;
+            for (let i = 0; i < data.length; i++) {
+                crc ^= data[i];
+                for (let j = 0; j < 8; j++) {
+                    crc = (crc >> 1) ^ ((crc & 0x0001) ? polynomial : 0);
+                }
+            }
+            return crc;
+        }
+
+        let updateTotalBytes = 0;
+        let updateTotalFrames = 0;
+        let updateState = 0;
+        let updateContentBytes = null;
+        let currentFrameIndex = 0;
+        let updateCrc = 0;
+        
+        // 更新按钮
+        const updateBtn = document.getElementById("updateBtn");
+        updateBtn.onclick = () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            
+            if (updateTotalBytes === 0) {
+                showAlert("请先选择并校验app文件");
+                return;
+            }
+            
+            document.getElementById("progressBar").style.width = "0%";
+            document.getElementById("progressText").textContent = "0%";
+            
+            updateState = 1;
+            const frame = framing(0x4001, [0x01], 1);
+            log("→ 发送更新通知命令(功能码0x4001): " + bufToHex(frame));
+            bleWrite(frame);
+        };
+        
+        async function sendNextFrame() {
+            if (!updateContentBytes || currentFrameIndex > updateTotalFrames) {
+                return;
+            }
+            
+            const progress = (currentFrameIndex / updateTotalFrames) * 100;
+            document.getElementById("progressBar").style.width = progress + "%";
+            document.getElementById("progressText").textContent = Math.round(progress) + "%";
+            
+            const startIndex = (currentFrameIndex - 1) * 254;
+            const endIndex = Math.min(startIndex + 254, updateContentBytes.length);
+            const dataLength = endIndex - startIndex;
+            
+            const frameData = [currentFrameIndex];
+            for (let i = startIndex; i < endIndex; i++) {
+                frameData.push(updateContentBytes[i]);
+            }
+            
+            const frame = framing(0x4003, frameData, frameData.length);
+            //log(`→ 发送第 ${currentFrameIndex}/${updateTotalFrames} 包(功能码0x4003): ${bufToHex(frame)}`);
+            log(`→ 发送第 ${currentFrameIndex}/${updateTotalFrames} 包(功能码0x4003)`);
+            await bleWriteWithChunk(frame);
+        }
+
+        // 恢复出厂参数按钮
+        const defaultBtn = document.getElementById("defaultBtn");
+        defaultBtn.onclick = () => {
+            if (confirm("确定要恢复出厂参数？点击确认，原调试参数将会丢失！")) {
+                const frame = framing(0x7009, [], 0);
+                log("→ 发送恢复出厂参数命令(功能码0x7009): " + bufToHex(frame));
+                bleWrite(frame);
+            }
+        };
+        
+        // 打开app按钮 - 选择hex文件
+        const openAppBtn = document.getElementById("openAppBtn");
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.hex';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+        
+        openAppBtn.onclick = () => {
+            fileInput.click();
+        };
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const fileName = file.name.toLowerCase();
+                if (fileName.endsWith('.hex')) {
+                    document.getElementById("appAdressInput").value = file.name;
+                    log("📁 已选择文件: " + file.name);
+                    
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const arrayBuffer = event.target.result;
+                        const data = new Uint8Array(arrayBuffer);
+                        
+                        if (data.length < 12) {
+                            showAlert("文件长度不足");
+                            return;
+                        }
+                        
+                        const originalStr = new TextDecoder('utf-8').decode(data);
+                        
+                        let asciiStr = '';
+                        for (let i = 0; i < originalStr.length; i += 3) {
+                            const hexByte = originalStr.substring(i, i + 2);
+                            const charCode = parseInt(hexByte, 16);
+                            asciiStr += String.fromCharCode(charCode);
+                        }
+                        
+                        if (asciiStr.length < 4) {
+                            showAlert("转换后内容不足");
+                            return;
+                        }
+                        
+                        const contentWithoutCrc = asciiStr.substring(0, asciiStr.length - 4);
+                        const fileCrcStr = asciiStr.substring(asciiStr.length - 4);
+                        
+                        const contentBytes = new Uint8Array(contentWithoutCrc.length);
+                        for (let i = 0; i < contentWithoutCrc.length; i++) {
+                            contentBytes[i] = contentWithoutCrc.charCodeAt(i);
+                        }
+                        
+                        const calculatedCrc = crc16(contentBytes);
+                        const expectedCrc = parseInt(fileCrcStr, 16);
+                        
+                        // document.getElementById("recvBox").textContent = asciiStr;
+                        // log("📄 文件内容已加载到接收框");
+                        
+                        log("🔍 CRC计算值: 0x" + calculatedCrc.toString(16).toUpperCase().padStart(4, '0') + ", 文件CRC: 0x" + fileCrcStr.toUpperCase());
+                        
+                        if (calculatedCrc === expectedCrc) {
+                            log("✅ CRC校验正确");
+                            updateContentBytes = contentBytes;
+                            updateTotalBytes = contentBytes.length;
+                            updateCrc = calculatedCrc;
+                            const frameSize = 254;
+                            updateTotalFrames = Math.ceil(updateTotalBytes / frameSize);
+                            const lastFrameBytes = updateTotalBytes % frameSize || frameSize;
+                            log(`📦 数据总字节数: ${updateTotalBytes}`);
+                            log(`📦 分包数量: ${updateTotalFrames}`);
+                            log(`📦 最后一包字节数: ${lastFrameBytes}`);
+                            showAlert(`CRC校验正确\n\n数据总字节数: ${updateTotalBytes}\n分包数量: ${updateTotalFrames}\n最后一包字节数: ${lastFrameBytes}`);
+                        } else {
+                            log("❌ CRC校验错误");
+                            showAlert("CRC校验错误");
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                } else {
+                    showAlert("请选择hex文件");
+                    e.target.value = '';
+                }
+            }
+        });
+
+        let isConnecting = false;
+
+        async function discoverAllServices(server) {
+            try {
+                const services = await server.getPrimaryServices();
+                
+                for (const service of services) {
+                    try {
+                        const characteristics = await service.getCharacteristics();
+                        
+                        for (const char of characteristics) {
+                            if (char.uuid.toLowerCase() === '0000fff1-0000-1000-8000-00805f9b34fb') {
+                                notifyChar = char;
+                            }
+                            if (char.uuid.toLowerCase() === '0000fff2-0000-1000-8000-00805f9b34fb') {
+                                writeChar = char;
+                            }
+                        }
+                    } catch (e) {
+                        // 忽略特征读取错误
+                    }
+                }
+                return services;
+            } catch (e) {
+                log("❌ 发现服务失败: " + e.message);
+                return [];
+            }
+        }
+
+        function checkBluetoothSupport() {
+            if (!navigator.bluetooth) {
+                scanBtn.disabled = true;
+                scanBtn.textContent = "浏览器不支持蓝牙";
+                return false;
+            }
+            if (!navigator.bluetooth.requestDevice) {
+                scanBtn.disabled = true;
+                scanBtn.textContent = "蓝牙API不可用";
+                return false;
+            }
+            return true;
+        }
+
+        window.addEventListener('load', () => {
+            checkBluetoothSupport();
+            console.log("蓝牙支持检查完成");
+        });
+
+        async function connectToDevice(selectedDevice) {
+            console.log("连接到设备: " + selectedDevice.name);
+            if (isConnecting) {
+                log("⚠️ 正在连接中，请稍候...");
+                return;
+            }
+            if (!checkBluetoothSupport()) {
+                return;
+            }
+            
+            if (device && device.gatt && device.gatt.connected) {
+                device.gatt.disconnect();
+            }
+            
+            isConnecting = true;
+            server = null;
+            characteristic = null;
+            notifyChar = null;
+            writeChar = null;
+            
+            try {
+                device = selectedDevice;
+                log("选中设备：" + device.name + " (ID: " + device.id + ")");
+
+                device.removeEventListener('gattserverdisconnected', onDisconnected);
+                device.addEventListener('gattserverdisconnected', onDisconnected);
+
+                log("正在连接GATT服务器...");
+                server = await device.gatt.connect();
+                if (!server) {
+                    throw new Error("GATT服务器连接返回空值");
+                }
+                log("GATT服务器连接成功");
+
+                await discoverAllServices(server);
+
+                let bleService = null;
+                try {
+                    bleService = await server.getPrimaryService(BLE_SERVICE_UUID);
+                } catch (e) {
+                    const services = await server.getPrimaryServices();
+                    for (const s of services) {
+                        if (s.uuid.toLowerCase().includes('fff0')) {
+                            bleService = s;
+                            break;
+                        }
+                    }
+                    if (!bleService) {
+                        throw new Error("未找到CH9141透传服务 (FFF0)");
+                    }
+                }
+
+                try {
+                    notifyChar = await bleService.getCharacteristic(BLE_CHAR_UUID_NOTIFY);
+                } catch (e) {
+                    const chars = await bleService.getCharacteristics();
+                    for (const c of chars) {
+                        if (c.properties.notify) {
+                            notifyChar = c;
+                            break;
+                        }
+                    }
+                }
+
+                try {
+                    writeChar = await bleService.getCharacteristic(BLE_CHAR_UUID_WRITE);
+                } catch (e) {
+                    const chars = await bleService.getCharacteristics();
+                    for (const c of chars) {
+                        if (c.properties.write || c.properties.writeWithoutResponse) {
+                            writeChar = c;
+                            break;
+                        }
+                    }
+                }
+
+                if (!notifyChar && !writeChar) {
+                    throw new Error("未找到可用的串口特征");
+                }
+
+                characteristic = writeChar || notifyChar;
+                
+                if (notifyChar) {
+                    await notifyChar.startNotifications();
+                    
+                    notifyChar.addEventListener("characteristicvaluechanged", e => {
+                        const val = e.target.value;
+                        if (!val) {
+                            log("❌ 接收到空数据");
+                            return;
+                        }
+                        
+                        let buffer;
+                        if (val.buffer) {
+                            buffer = val.buffer.slice(val.byteOffset, val.byteOffset + val.byteLength);
+                        } else if (val instanceof ArrayBuffer) {
+                            buffer = val;
+                        } else {
+                            log("❌ 无法解析接收到的数据");
+                            return;
+                        }
+                        
+                        const rawHex = bufToHex(buffer);
+                        const uint8Data = new Uint8Array(buffer);
+                        
+                        if (isCurveDataReceiving && uint8Data.length === 4) {
+                            const sampleArray = new Int32Array(buffer);
+                            let value = sampleArray[0];
+                            
+                            if (forceRadio.checked) {
+                                curveData.push(parseFloat(value.toFixed(1)));
+                            } else {
+                                curveData.push(parseFloat((value / 10).toFixed(1)));
+                            }
+                            return;
+                        }
+                        
+                        if (isSecCurveRunning) {
+                            // 秒帧曲线模式：处理帧格式数据
+                            // 注意：秒帧曲线与实时曲线是互斥的，不能同时使用！
+                            //log("📊 秒帧曲线：收到原始数据 - 长度: " + uint8Data.length + ", 内容: " + bufToHex(uint8Data));
+                            
+                            // 先检查是否是0x7030响应帧（启动/停止确认）
+                            if (uint8Data.length >= 8 && uint8Data[0] === 0x26 && uint8Data[1] === 0x23 && 
+                                uint8Data[2] === 0x30 && uint8Data[3] === 0x70) {
+                                // 是0x7030响应帧，让它走正常的帧解析流程
+                                log("📊 秒帧曲线：检测到0x7030响应帧，交给正常解析");
+                                // 不处理，直接走到下面的parseFrame逻辑
+                            } else if (uint8Data[0] === 0x26 && uint8Data[1] === 0x23) {
+                                secCurveBuffer = new Uint8Array(buffer);
+                                log("📊 秒帧曲线：检测到帧头，初始化缓冲区");
+                                return;
+                            } else if (secCurveBuffer) {
+                                const combined = new Uint8Array(secCurveBuffer.length + uint8Data.length);
+                                combined.set(secCurveBuffer);
+                                combined.set(uint8Data, secCurveBuffer.length);
+                                secCurveBuffer = combined;
+                                log("📊 秒帧曲线：数据追加，当前缓冲区长度: " + secCurveBuffer.length);
+                                
+                                if (secCurveBuffer.length >= 7 && secCurveBuffer[4] + 7 <= secCurveBuffer.length) {
+                                    const dataLength = secCurveBuffer[4];
+                                    const frameLength = 7 + dataLength;
+                                    log("📊 秒帧曲线：期望帧长度: " + frameLength + ", 当前缓冲区长度: " + secCurveBuffer.length);
+                                    
+                                    if (secCurveBuffer.length >= frameLength && secCurveBuffer[frameLength - 1] === 0x24) {
+                                        const frameData = secCurveBuffer.slice(5, 5 + dataLength);
+                                        log("📊 秒帧曲线：帧解析成功，数据长度: " + frameData.length);
+                                        
+                                        if (secCurveBuffer[2] === 0x31 && secCurveBuffer[3] === 0x70) {
+                                            if (frameData.length >= 206) {
+                                                const timestamp = frameData[0] | (frameData[1] << 8) | (frameData[2] << 16) | (frameData[3] << 24);
+                                                secCurveTimeData.push(timestamp);
+                                                if (secCurveTimeData.length > 100) {
+                                                    secCurveTimeData.shift();
+                                                }
+
+                                                // 每帧100个力值数据直接替换
+                                                secCurveSampleData = [];
+                                                for (let i = 0; i < 100; i++) {
+                                                    const sampleArray = new Int16Array(new Uint8Array([frameData[4 + i * 2], frameData[5 + i * 2]]).buffer);
+                                                    secCurveSampleData.push(sampleArray[0]);
+                                                }
+
+                                                const tempArray = new Int16Array(new Uint8Array([frameData[204], frameData[205]]).buffer);
+                                                secCurveTempData.push(tempArray[0] / 10);
+                                                if (secCurveTempData.length > 100) {
+                                                    secCurveTempData.shift();
+                                                }
+
+                                                drawSecCurve();
+                                            } else {
+                                                log("❌ 秒帧曲线：数据长度不足，期望206，实际: " + frameData.length);
+                                            }
+                                        } else {
+                                            log("❌ 秒帧曲线：功能码不匹配，期望7031，实际: " + bufToHex(new Uint8Array([secCurveBuffer[2], secCurveBuffer[3]])));
+                                        }
+                                        
+                                        secCurveBuffer = null;
+                                        return;
+                                    } else {
+                                        if (secCurveBuffer.length >= frameLength) {
+                                            log("❌ 秒帧曲线：帧尾不匹配");
+                                        }
+                                    }
+                                }
+                                return;
+                            } else {
+                                log("❌ 秒帧曲线：缓冲区未初始化，丢弃数据");
+                                return;
+                            }
+                        }
+                        
+                        //log("🔍 收到数据: " + rawHex);
+                        
+                        const frame = parseFrame(buffer);
+                        if (frame.valid) {
+                            //log("✅ 帧解析成功");
+                            //log("  ├─ 帧头: " + bufToHex(new Uint8Array(frame.frameHeader)));
+                            //log("  ├─ 功能码: 0x" + frame.functionCode.toString(16).toUpperCase().padStart(4, '0'));
+                            //log("  ├─ 数据长度: " + frame.dataLength);
+                            //log("  ├─ 数据: " + bufToHex(new Uint8Array(frame.data)));
+                            //log("  ├─ 校验和: 0x" + frame.checksum.toString(16).toUpperCase());
+                            //log("  └─ 帧尾: 0x" + frame.frameTail.toString(16).toUpperCase());
+                            
+                            if (frame.functionCode === 0x5001) {
+                                const parsedData = parse5001Data(frame.data);
+                                log("📊 0x5001数据解析:");
+                                log("  ├─ 温度变化率: " + parsedData.tempRate + " ℃");
+                                log("  ├─ 标志位: " + parsedData.tempRateBinary.join(' '));
+                                log("  ├─ 温度值: " + parsedData.tempValue + " ℃");
+                                //log("  ├─ 温度采样值: 0x" + parsedData.zero.toString(16).toUpperCase().padStart(2, '0'));
+                                log("  ├─ 温度采样值: " + parsedData.zero);
+                                
+                                // 根据标志位设置UI状态
+                                if (parsedData.flag !== null) {
+                                    // 第1位(&0x02)：true设置forceRadio，false设置voltageRadio
+                                    if (parsedData.flag & 0x02) {
+                                        forceRadio.checked = true;
+                                        voltageRadio.checked = false;
+                                    } else {
+                                        forceRadio.checked = false;
+                                        voltageRadio.checked = true;
+                                    }
+                                    updateDataFormatDisplay();
+                                    
+                                    // 第6位(&0x40)：true设置setZeroCb为checked，false为非checked
+                                    if (parsedData.flag & 0x40) {
+                                        setZeroCb.checked = true;
+                                    } else {
+                                        setZeroCb.checked = false;
+                                    }
+                                }
+                                
+                                let displaySampleValue;
+                                if (forceRadio.checked) {
+                                    displaySampleValue = parsedData.sampleValue.toFixed(1);
+                                    log("  └─ 采样值: " + displaySampleValue + " N");
+                                } else {
+                                    displaySampleValue = (parsedData.sampleValue / 10).toFixed(1);
+                                    log("  └─ 采样值: " + displaySampleValue + " uV");
+                                }
+                                
+                                tempInput.value = parsedData.tempValue;
+                                readInput.value = displaySampleValue;
+                                
+                            }
+                            
+                            if (frame.functionCode === 0x700A) {
+                                if (frame.data.length > 0 && frame.data[0] === 0x01) {
+                                    if (lastSendCommandData === 0x01) {
+                                        showAlert("转换力格式设置成功");
+                                    } else if (lastSendCommandData === 0x00) {
+                                        showAlert("电压值格式设置成功");
+                                    }
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x9005) {
+                                if (frame.data.length > 0 && frame.data[0] === 0x01) {
+                                    showAlert("传感器复位成功");
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x70A0) {
+                                if (frame.data.length > 0 && frame.data[0] === 0x01) {
+                                    showAlert("校时成功");
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x7007) {
+                                if (frame.data.length > 0 && frame.data[0] === 0x01) {
+                                    if (setZeroCb.checked) {
+                                        showAlert("零值设置成功");
+                                    } else {
+                                        showAlert("零值取消成功");
+                                    }
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x7009) {
+                                if (frame.data.length > 0 && frame.data[0] === 0x01) {
+                                    showAlert("传感器已恢复出厂参数，并重启");
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x7003) {
+                                if (frame.data.length > 0 && frame.data[0] === 0x01) {
+                                    showAlert("校准参数设置成功");
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x7004) {
+                                if (frame.data.length >= 33) {
+                                    if (frame.data[0] === 0x01) {
+                                        function bytesToIntLE(data, offset) {
+                                            const byteArray = new Uint8Array(4);
+                                            for (let i = 0; i < 4; i++) {
+                                                byteArray[i] = data[offset + i];
+                                            }
+                                            const intArray = new Int32Array(byteArray.buffer);
+                                            return intArray[0];
+                                        }
+                                        
+                                        const laRuLow = bytesToIntLE(frame.data, 1);
+                                        const laRuLowDis = bytesToIntLE(frame.data, 5);
+                                        const laRuHight = bytesToIntLE(frame.data, 9);
+                                        const laRuHightDis = bytesToIntLE(frame.data, 13);
+                                        const shenChuLow = bytesToIntLE(frame.data, 17);
+                                        const shenChuLowDis = bytesToIntLE(frame.data, 21);
+                                        const shenChuHight = bytesToIntLE(frame.data, 25);
+                                        const shenChuHightDis = bytesToIntLE(frame.data, 29);
+                                        
+                                        if (document.getElementById("laRuLowInput")) {
+                                            document.getElementById("laRuLowInput").value = (laRuLow / 10).toFixed(1);
+                                        }
+                                        if (document.getElementById("laRuLowDisInput")) {
+                                            document.getElementById("laRuLowDisInput").value = laRuLowDis;
+                                        }
+                                        document.getElementById("laRuHightInput").value = (laRuHight / 10).toFixed(1);
+                                        document.getElementById("laRuHightDisInput").value = laRuHightDis;
+                                        if (document.getElementById("shenChuLowInput")) {
+                                            document.getElementById("shenChuLowInput").value = (shenChuLow / 10).toFixed(1);
+                                        }
+                                        if (document.getElementById("shenChuLowDisInput")) {
+                                            document.getElementById("shenChuLowDisInput").value = shenChuLowDis;
+                                        }
+                                        document.getElementById("shenChuHightInput").value = (shenChuHight / 10).toFixed(1);
+                                        document.getElementById("shenChuHightDisInput").value = shenChuHightDis;
+                                        
+                                        log("📊 校准参数读取成功");
+                                        showAlert("回读校准参数成功");
+                                    }
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x700D) {
+                                if (frame.data.length > 0 && frame.data[0] === 0x01) {
+                                    showAlert("调整参数设置成功");
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x700E) {
+                                if (frame.data.length >= 13) {
+                                    if (frame.data[0] === 0x01) {
+                                        function bytesToIntLE(data, offset) {
+                                            const byteArray = new Uint8Array(4);
+                                            for (let i = 0; i < 4; i++) {
+                                                byteArray[i] = data[offset + i];
+                                            }
+                                            const intArray = new Int32Array(byteArray.buffer);
+                                            return intArray[0];
+                                        }
+                                        
+                                        if (frame.data.length >= 17) {
+                                            // 17字节格式：4个参数
+                                            const laRuZero = bytesToIntLE(frame.data, 1);
+                                            const laRuMul = bytesToIntLE(frame.data, 5);
+                                            const shenChuZero = bytesToIntLE(frame.data, 9);
+                                            const shenChuMul = bytesToIntLE(frame.data, 13);
+                                            
+                                            document.getElementById("laRuZeroInput").value = laRuZero;
+                                            document.getElementById("laRuMulInput").value = (laRuMul / 100).toFixed(2);
+                                            document.getElementById("shenChuZeroInput").value = shenChuZero;
+                                            document.getElementById("shenChuMulInput").value = (shenChuMul / 100).toFixed(2);
+                                        } else {
+                                            // 13字节格式：3个参数
+                                            const zeroVal = bytesToIntLE(frame.data, 1);
+                                            const laRuMul = bytesToIntLE(frame.data, 5);
+                                            const shenChuMul = bytesToIntLE(frame.data, 9);
+                                            
+                                            document.getElementById("laRuZeroInput").value = zeroVal;
+                                            document.getElementById("shenChuZeroInput").value = zeroVal;
+                                            document.getElementById("laRuMulInput").value = (laRuMul / 100).toFixed(2);
+                                            document.getElementById("shenChuMulInput").value = (shenChuMul / 100).toFixed(2);
+                                        }
+                                        
+                                        log("📊 调整参数读取成功");
+                                        showAlert("回读调整参数成功");
+                                    }
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x40A1) {
+                                if (frame.data.length >= 35) {
+                                    const versionStr = new TextDecoder('utf-8').decode(new Uint8Array(frame.data.slice(1)));
+                                    
+                                    let hardwareVersion = "";
+                                    const hIndex = versionStr.indexOf("H:");
+                                    if (hIndex !== -1) {
+                                        hardwareVersion = versionStr.substring(hIndex + 2, hIndex + 6);
+                                    }
+                                    document.getElementById("hardwareVersionInput").value = hardwareVersion;
+                                    
+                                    let appVersion = "没有app";
+                                    const asIndex = versionStr.indexOf("AS:");
+                                    if (asIndex !== -1) {
+                                        appVersion = versionStr.substring(asIndex + 3, asIndex + 15);
+                                    }
+                                    document.getElementById("appVersionInput").value = appVersion;
+                                    
+                                    let bootVersion = "没有boot";
+                                    const bsIndex = versionStr.indexOf("BS:");
+                                    if (bsIndex !== -1) {
+                                        bootVersion = versionStr.substring(bsIndex + 3, bsIndex + 16);
+                                    }
+                                    document.getElementById("bootVersionInput").value = bootVersion;
+                                    
+                                    log("📊 版本信息读取成功");
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x4001) {
+                                if (frame.data.length > 0) {
+                                    if (frame.data[0] === 0x00) {
+                                        log("❌ 更新通知返回失败");
+                                        recvBox.textContent += "更新通知返回失败\n";
+                                        updateState = 0;
+                                    } else if (frame.data[0] === 0x01) {
+                                        log("✅ 更新通知返回成功，发送app文件信息");
+                                        recvBox.textContent += "更新通知返回成功，发送app文件信息\n";
+                                        
+                                        const dataArray = [];
+                                        for (let i = 0; i < 4; i++) {
+                                            dataArray.push((updateTotalBytes >> (8 * i)) & 0xFF);
+                                        }
+                                        for (let i = 0; i < 2; i++) {
+                                            dataArray.push((updateCrc >> (8 * i)) & 0xFF);
+                                        }
+                                        
+                                        const frame = framing(0x4002, dataArray, 6);
+                                        log("→ 发送app文件信息(功能码0x4002): " + bufToHex(frame));
+                                        bleWrite(frame);
+                                    }
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x4002) {
+                                if (frame.data.length > 0) {
+                                    if (frame.data[0] === 0x00) {
+                                        log("❌ app信息发送失败，退出");
+                                        recvBox.textContent += "app信息发送失败，退出\n";
+                                        updateState = 0;
+                                    } else if (frame.data[0] === 0x01) {
+                                        log("✅ 发送app文件信息成功，开始发送app应用");
+                                        recvBox.textContent += "发送app文件信息成功，开始发送app应用\n";
+                                        updateState = 2;
+                                        currentFrameIndex = 1;
+                                        sendNextFrame();
+                                    }
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x4003) {
+                                if (frame.data.length >= 2) {
+                                    const responseByte = frame.data[0];
+                                    const nextFrameIndex = frame.data[1];
+                                    
+                                    if (responseByte === 0x01) {
+                                        if (nextFrameIndex > currentFrameIndex) {
+                                            if (nextFrameIndex > updateTotalFrames) {
+                                                log("✅ 文件发送结束，等待更新完成");
+                                                recvBox.textContent += "文件发送结束，等待更新完成\n";
+                                                updateState = 3;
+                                            } else {
+                                                currentFrameIndex = nextFrameIndex;
+                                                sendNextFrame();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x4004) {
+                                if (frame.data.length > 0) {
+                                    if (frame.data[0] === 0x01) {
+                                        document.getElementById("progressBar").style.width = "100%";
+                                        document.getElementById("progressText").textContent = "100%";
+                                        log("✅ 更新成功，等待传感器重启");
+                                        showAlert("更新成功，等待传感器重启");
+                                    } else {
+                                        if (frame.data[0] === 0x03) {
+                                            log("❌ 更新失败，设备CRC校验失败");
+                                            showAlert("更新失败，设备CRC校验失败");
+                                        } else {
+                                        log("❌ 更新失败，请重新更新，或检查设备");
+                                        showAlert("更新失败，请重新更新，或检查设备");
+                                        }
+                                    }
+                                    updateState = 0;
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x70A1) {
+                                if (frame.data.length >= 5) {
+                                    const timestamp = frame.data[1] | (frame.data[2] << 8) | (frame.data[3] << 16) | (frame.data[4] << 24);
+                                    const date = new Date(timestamp * 1000);
+                                    const year = date.getFullYear();
+                                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                                    const day = String(date.getDate()).padStart(2, '0');
+                                    const hours = String(date.getHours()).padStart(2, '0');
+                                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                                    const seconds = String(date.getSeconds()).padStart(2, '0');
+                                    const timeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+                                    logColor("🕐 获取时间: " + timeStr, "red");
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x7032) {
+                                if (frame.data.length > 0) {
+                                    if (frame.data[0] === 0x01 && isCurveRunning) {
+                                        log("✅ 实时曲线启动成功");
+                                        curveArea.style.display = "block";
+                                        document.getElementById("sampleCurveContainer").style.display = "block";
+                                        document.getElementById("tempCurveContainer").style.display = "none";
+                                        curveData = [];
+                                        drawCurve();
+
+                                        curveTimer = setInterval(() => {
+                                            if (curveData.length > maxDataPoints) {
+                                                curveData.shift();
+                                            }
+                                            drawCurve();
+                                        }, 100);
+                                    } else if (frame.data[0] === 0x01 && !isCurveRunning) {
+                                        log("✅ 实时曲线已停止");
+                                        realcurveBtn.textContent = "实时曲线";
+                                        isCurveDataReceiving = false;
+                                        isCurveRunning = false;
+                                        curveArea.style.display = "none";
+                                        if (curveTimer) {
+                                            clearInterval(curveTimer);
+                                            curveTimer = null;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (frame.functionCode === 0x7030) {
+                                if (frame.data.length > 0 && frame.data[0] === 0x01) {
+                                    if (isSecCurveRunning) {
+                                        log("✅ 秒帧曲线启动成功");
+                                        secCurveBtn.textContent = "停止";
+                                        curveArea.style.display = "block";
+                                        //log("📊 秒帧曲线：curveArea 显示状态: " + curveArea.style.display);
+                                        document.getElementById("sampleCurveContainer").style.display = "block";
+                                        document.getElementById("tempCurveContainer").style.display = "block";
+                                        //log("📊 秒帧曲线：sampleCurveContainer 显示状态: " + document.getElementById("sampleCurveContainer").style.display);
+                                        //log("📊 秒帧曲线：tempCurveContainer 显示状态: " + document.getElementById("tempCurveContainer").style.display);
+                                        secCurveSampleData = [];
+                                        secCurveTempData = [];
+                                        secCurveTimeData = [];
+                                    } else {
+                                        log("✅ 秒帧曲线已停止");
+                                        secCurveBtn.textContent = "秒帧曲线";
+                                        curveArea.style.display = "none";
+                                        document.getElementById("sampleCurveContainer").style.display = "none";
+                                        document.getElementById("tempCurveContainer").style.display = "none";
+                                    }
+                                }
+                            }
+                        } else {
+                            // 帧解析失败时，如果有secCurveBuffer则不显示错误
+                            if (!isSecCurveRunning) {
+                                log("❌ 帧解析失败: " + frame.error);
+                            }
+                        }
+                    });
+                }
+
+                log("✅ CH9141蓝牙串口连接成功");
+            disconnectBtn.disabled = false;
+            sendBtn.disabled = false;
+            readOnceBtn.disabled = false;
+            resetBtn.disabled = false;
+            cycleBtn.disabled = false;
+            timeSetBtn.disabled = false;
+            timeGetBtn.disabled = false;
+            defaultBtn.disabled = false;
+            caliSendBtn.disabled = false;
+            caliReadBtn.disabled = false;
+            adjustSendBtn.disabled = false;
+            adjustReadBtn.disabled = false;
+            readVersionBtn.disabled = false;
+            updateBtn.disabled = false;
+            realcurveBtn.disabled = false;
+            secCurveBtn.disabled = false;
+            scanBtn.disabled = true;
+                
+                // 检查是否有未预期的4字节数据，如有则发送停止曲线命令
+                setTimeout(async () => {
+                    if (writeChar || characteristic) {
+                        const frame = framing(0x7032, [0x00], 1);
+                        log("→ 发送停止实时曲线命令(功能码0x7032): " + bufToHex(frame));
+                        await bleWrite(frame);
+                    }
+                }, 500);
+            } catch (err) {
+                log("❌ 连接失败：" + err.message);
+                log("错误详情: name=" + err.name + ", code=" + err.code);
+                
+                if (err.message.includes('Not supported') || err.name === 'NotSupportedError') {
+                    log("💡 ❗ 重要提示：设备不支持GATT协议");
+                    log("💡 可能原因：");
+                    log("  1. 设备是经典蓝牙（BR/EDR）而非BLE设备");
+                    log("  2. 设备需要先在系统蓝牙设置中配对");
+                    log("  3. 浏览器/操作系统不支持该设备类型");
+                    log("💡 建议操作：");
+                    log("  1. 先在Windows蓝牙设置中配对CH9141BLE2U设备");
+                    log("  2. 确保设备处于可连接状态");
+                    log("  3. 尝试使用专用蓝牙串口软件测试设备");
+                } else if (err.message.includes('GATT Server is disconnected')) {
+                    log("💡 提示：GATT服务器断开连接");
+                    log("  - 请确保设备电量充足");
+                    log("  - 尝试重启蓝牙适配器");
+                    log("  - 检查设备是否在有效范围内");
+                } else if (err.message.includes('Security')) {
+                    log("💡 提示：安全权限不足");
+                    log("  - 请确保设备已配对");
+                    log("  - 检查浏览器权限设置");
+                }
+                isConnecting = false;
+                server = null;
+                characteristic = null;
+                notifyChar = null;
+                writeChar = null;
+            }
+        }
+
+        scanBtn.onclick = async () => {
+            if (!checkBluetoothSupport()) {
+                return;
+            }
+            
+            scanBtn.textContent = "连接中...";
+            scanBtn.disabled = true;
+            
+            try {
+                log("正在连接蓝牙设备...");
+                
+                const selectedDevice = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { services: ['0000fff0-0000-1000-8000-00805f9b34fb'] },
+                        { services: ['00001800-0000-1000-8000-00805f9b34fb'] },
+                        { namePrefix: 'CH9141' },
+                        { namePrefix: 'BLE' },
+                        { namePrefix: 'HC-05' },
+                        { namePrefix: 'HC-06' },
+                        { namePrefix: 'JDY' },
+                        { namePrefix: 'HM-10' },
+                        { namePrefix: 'ESP32' },
+                        { namePrefix: 'nRF' }
+                    ],
+                    optionalServices: ['0000fff0-0000-1000-8000-00805f9b34fb', '0000fff1-0000-1000-8000-00805f9b34fb', '0000fff2-0000-1000-8000-00805f9b34fb', '00001800-0000-1000-8000-00805f9b34fb', '00001801-0000-1000-8000-00805f9b34fb']
+                });
+                
+                log("📱 设备信息：");
+                log("  ├─ 设备名称：" + (selectedDevice.name || "未知"));
+                log("  ├─ 设备ID：" + selectedDevice.id);
+                log("  ├─ 蓝牙类型：" + selectedDevice.deviceType);
+                
+                if (selectedDevice.uuids && selectedDevice.uuids.length > 0) {
+                    log("  ├─ 服务UUID列表：");
+                    selectedDevice.uuids.forEach((uuid, index) => {
+                        log("  │   └─ " + (index + 1) + ". " + uuid);
+                    });
+                }
+                
+                if (selectedDevice.advertising) {
+                    log("  ├─ 广播数据：");
+                    if (selectedDevice.advertising.name) {
+                        log("  │   └─ 广播名称：" + selectedDevice.advertising.name);
+                    }
+                    if (selectedDevice.advertising.manufacturerData) {
+                        log("  │   └─ 厂商数据：存在");
+                    }
+                    if (selectedDevice.advertising.serviceData) {
+                        log("  │   └─ 服务数据：存在");
+                    }
+                    if (selectedDevice.advertising.txPower) {
+                        log("  │   └─ 发射功率：" + selectedDevice.advertising.txPower + " dBm");
+                    }
+                    if (selectedDevice.advertising.appearance) {
+                        log("  │   └─ 外观特征：0x" + selectedDevice.advertising.appearance.toString(16));
+                    }
+                }
+                
+                log("  └─ 设备状态：已发现，准备连接");
+                
+                await connectToDevice(selectedDevice);
+                
+            } catch (err) {
+                log("❌ 连接失败：" + err.message);
+                scanBtn.textContent = "连接蓝牙";
+                scanBtn.disabled = false;
+            }
+        };
+
+
+
+        function onDisconnected(event) {
+            log("🔌 蓝牙连接已断开");
+            disconnectBtn.disabled = true;
+            sendBtn.disabled = true;
+            readOnceBtn.disabled = true;
+            cycleBtn.disabled = true;
+            if (cycleTimer) {
+                clearInterval(cycleTimer);
+                cycleTimer = null;
+            }
+            isCycleRunning = false;
+            cycleBtn.textContent = "周期";
+            resetBtn.disabled = true;
+            defaultBtn.disabled = true;
+            timeSetBtn.disabled = true;
+            timeGetBtn.disabled = true;
+            caliSendBtn.disabled = true;
+            caliReadBtn.disabled = true;
+            adjustSendBtn.disabled = true;
+            adjustReadBtn.disabled = true;
+            readVersionBtn.disabled = true;
+            updateBtn.disabled = true;
+            realcurveBtn.disabled = true;
+            scanBtn.disabled = false;
+            scanBtn.textContent = "连接蓝牙";
+            
+            // 重置曲线相关状态
+            isCurveDataReceiving = false;
+            isCurveRunning = false;
+            realcurveBtn.textContent = "实时曲线";
+            curveArea.style.display = "none";
+            if (curveTimer) {
+                clearInterval(curveTimer);
+                curveTimer = null;
+            }
+            
+            // 重置秒帧曲线状态
+            isSecCurveRunning = false;
+            secCurveBtn.textContent = "秒帧曲线";
+            secCurveBtn.disabled = true;
+            secCurveSampleData = [];
+            secCurveTempData = [];
+            secCurveTimeData = [];
+            document.getElementById("sampleCurveContainer").style.display = "none";
+            document.getElementById("tempCurveContainer").style.display = "none";
+            
+            characteristic = null;
+            server = null;
+            notifyChar = null;
+            writeChar = null;
+        }
+
+        async function bleWrite(data) {
+            // 下发非秒帧曲线命令时，传感器会主动停止秒帧曲线，自动恢复按钮状态
+            if (isSecCurveRunning && data && data.length >= 4) {
+                const funcCode = data[2] | (data[3] << 8);
+                if (funcCode !== 0x7030) {
+                    isSecCurveRunning = false;
+                    secCurveBtn.textContent = "秒帧曲线";
+                    curveArea.style.display = "none";
+                    secCurveBuffer = null;
+                }
+            }
+            const char = writeChar || characteristic;
+            if (!char) {
+                log("❌ 没有可用的写入特征");
+                return false;
+            }
+            try {
+                if (char.properties.write) {
+                    await char.writeValue(data);
+                    return true;
+                } else if (char.properties.writeWithoutResponse) {
+                    await char.writeValueWithoutResponse(data);
+                    return true;
+                } else {
+                    log("❌ 特征不支持写入操作");
+                    return false;
+                }
+            } catch (err) {
+                log("❌ 写入失败: " + err.message);
+                if (err.message.includes('not permitted')) {
+                    log("💡 提示：尝试切换写入方法");
+                }
+                return false;
+            }
+        }
+        
+        async function bleWriteWithChunk(data) {
+            const char = writeChar || characteristic;
+            if (!char) {
+                log("❌ 没有可用的写入特征");
+                return false;
+            }
+            
+            try {
+                const maxChunkSize = 20;  // BLE标准限制为20字节
+                let offset = 0;
+                let sentBytes = 0;
+                
+                while (offset < data.length) {
+                    const chunkSize = Math.min(maxChunkSize, data.length - offset);
+                    const chunk = data.slice(offset, offset + chunkSize);
+                    
+                    if (char.properties.write) {
+                        await char.writeValue(chunk);
+                    } else if (char.properties.writeWithoutResponse) {
+                        await char.writeValueWithoutResponse(chunk);
+                        await new Promise(resolve => setTimeout(resolve, 5));
+                    } else {
+                        log("❌ 特征不支持写入操作");
+                        return false;
+                    }
+                    
+                    offset += chunkSize;
+                    sentBytes += chunkSize;
+                }
+                
+                return true;
+            } catch (err) {
+                log("❌ 写入失败: " + err.message);
+                if (err.message.includes('invalid attribute length')) {
+                    log("💡 提示：数据包可能太大，请减小分块大小");
+                }
+                return false;
+            }
+        }
+
+
+
+        // 单次读取
+        readOnceBtn.onclick = async () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            const testFrame = framing(0x5001, [], 0);
+            log("→ 发送读取命令(功能码0x5001): " + bufToHex(testFrame));
+            await bleWrite(testFrame);
+        };
+
+        // 周期读取
+        const cycleBtn = document.getElementById("cycleBtn");
+        const intervalInput = document.getElementById("intervalInput");
+        let cycleTimer = null;
+        let isCycleRunning = false;
+        
+        async function readData() {
+            if (!writeChar && !characteristic) {
+                return;
+            }
+            const testFrame = framing(0x5001, [], 0);
+            log("→ 发送读取命令(功能码0x5001): " + bufToHex(testFrame));
+            await bleWrite(testFrame);
+        }
+        
+        cycleBtn.onclick = () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            
+            if (!isCycleRunning) {
+                const intervalValue = parseFloat(intervalInput.value);
+                if (isNaN(intervalValue) || intervalValue < 1 || intervalValue > 300) {
+                    showAlert("输入值不符合条件");
+                    return;
+                }
+                
+                isCycleRunning = true;
+                cycleBtn.textContent = "停止周期";
+                log("🔄 开始周期读取，间隔: " + intervalValue + "秒");
+                readData();
+                cycleTimer = setInterval(readData, intervalValue * 1000);
+            } else {
+                isCycleRunning = false;
+                cycleBtn.textContent = "周期";
+                if (cycleTimer) {
+                    clearInterval(cycleTimer);
+                    cycleTimer = null;
+                }
+                log("⏹️ 停止周期读取");
+            }
+        };
+
+        // 复位传感器
+        const resetBtn = document.getElementById("resetBtn");
+        resetBtn.onclick = async () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            const resetFrame = framing(0x9005, [], 0);
+            log("→ 发送复位传感器命令(功能码0x9005): " + bufToHex(resetFrame));
+            await bleWrite(resetFrame);
+        };
+
+        // 设置时间按钮
+        const timeSetBtn = document.getElementById("timeSetBtn");
+        timeSetBtn.onclick = async () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            const now = new Date();
+            const timestamp = Math.floor(now.getTime() / 1000);
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            logColor("🕐 设置时间: " + `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`, "red");
+            
+            const timestampBytes = [];
+            timestampBytes.push(timestamp & 0xFF);
+            timestampBytes.push((timestamp >> 8) & 0xFF);
+            timestampBytes.push((timestamp >> 16) & 0xFF);
+            timestampBytes.push((timestamp >> 24) & 0xFF);
+            
+            const timeFrame = framing(0x70A0, timestampBytes, 4);
+            log("→ 发送校时命令(功能码0x70A0): " + bufToHex(timeFrame));
+            await bleWrite(timeFrame);
+        };
+
+        // 获取时间按钮
+        const timeGetBtn = document.getElementById("timeGetBtn");
+        timeGetBtn.onclick = async () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            const getTimeFrame = framing(0x70A1, [], 0);
+            log("→ 发送获取时间命令(功能码0x70A1): " + bufToHex(getTimeFrame));
+            await bleWrite(getTimeFrame);
+        };
+
+        // 发送数据
+        sendBtn.onclick = async () => {
+            const txt = sendInput.value.trim();
+            if (!txt || (!writeChar && !characteristic)) {
+                if (!writeChar && !characteristic) log("❌ 请先连接设备");
+                return;
+            }
+            let sendBuf;
+            const sendMode = document.querySelector('input[name="sendMode"]:checked').value;
+            try {
+                if (sendMode === "hex") {
+                    sendBuf = hexToBuf(txt);
+                    log("→ 发送HEX：" + bufToHex(sendBuf));
+                } else {
+                    sendBuf = new TextEncoder().encode(txt);
+                    log("→ 发送文本：" + txt);
+                }
+                const success = await bleWrite(sendBuf);
+                if (success) {
+                    sendInput.value = "";
+                }
+            } catch (err) {
+                log("❌ 发送数据失败: " + err.message);
+            }
+        };
+
+        // 断开连接
+        disconnectBtn.onclick = () => {
+            if (device && device.gatt.connected) device.gatt.disconnect();
+            log("🔌 已断开连接");
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            sendBtn.disabled = true;
+            readOnceBtn.disabled = true;
+        };
+
+
+        // 实时曲线功能
+        const curveArea = document.getElementById("curveArea");
+        const curveCanvas = document.getElementById("curveCanvas");
+        const ctx = curveCanvas.getContext("2d");
+        const tempCurveCanvas = document.getElementById("tempCurveCanvas");
+        const tempCtx = tempCurveCanvas ? tempCurveCanvas.getContext("2d") : null;
+
+        // HiDPI Canvas 适配
+        const BASE_SAMPLE_SIZE = { w: 800, h: 250 };
+        const BASE_TEMP_SIZE = { w: 800, h: 150 };
+        function setupHiDPI() {
+            const dpr = window.devicePixelRatio || 1;
+            // 采样值曲线
+            const rectSample = curveCanvas.getBoundingClientRect();
+            const cssW = rectSample.width > 0 ? rectSample.width : BASE_SAMPLE_SIZE.w;
+            const cssH = BASE_SAMPLE_SIZE.h;
+            curveCanvas.width = Math.floor(cssW * dpr);
+            curveCanvas.height = Math.floor(cssH * dpr);
+            curveCanvas.style.height = cssH + "px";
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            // 温度曲线
+            if (tempCurveCanvas) {
+                const cssHT = BASE_TEMP_SIZE.h;
+                tempCurveCanvas.width = Math.floor(cssW * dpr);
+                tempCurveCanvas.height = Math.floor(cssHT * dpr);
+                tempCurveCanvas.style.height = cssHT + "px";
+                tempCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
+        }
+        setupHiDPI();
+        window.addEventListener("resize", () => setupHiDPI());
+        
+        let curveData = [];
+        let curveTimer = null;
+        let isCurveRunning = false;
+        let isCurveDataReceiving = false;
+        let isSecCurveRunning = false;
+        let secCurveSampleData = [];
+        let secCurveTempData = [];
+        let secCurveTimeData = [];
+        let secCurveBuffer = null;
+        const maxDataPoints = 300;
+
+        function generateRandomValue() {
+            return (Math.random() * 20 - 10).toFixed(2);
+        }
+
+        function drawCurve() {
+            // 使用CSS像素尺寸绘制（已通过setTransform做了DPR缩放）
+            const cssRect = curveCanvas.getBoundingClientRect();
+            const width = cssRect.width > 0 ? cssRect.width : BASE_SAMPLE_SIZE.w;
+            const height = BASE_SAMPLE_SIZE.h;
+            // 左/右/上/下：保证数值标签不被裁
+            const padL = 55, padR = 15, padT = 22, padB = 18;
+            const chartWidth = width - padL - padR;
+            const chartHeight = height - padT - padB;
+
+            ctx.save();
+            ctx.clearRect(0, 0, width, height);
+
+            const unit = forceRadio.checked ? "N" : "uV";
+            let minValue, maxValue;
+            if (curveData.length > 0) {
+                const dataMin = Math.min(...curveData);
+                const dataMax = Math.max(...curveData);
+                const margin = Math.max(Math.abs(dataMax - dataMin) * 0.2, 500);
+                minValue = Math.max(dataMin - margin, -20000);
+                maxValue = Math.min(dataMax + margin, 20000);
+            } else {
+                minValue = -20000;
+                maxValue = 20000;
+            }
+            const valueRange = maxValue - minValue;
+
+            // 网格
+            ctx.strokeStyle = "#eee";
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 5; i++) {
+                const y = padT + (chartHeight / 5) * i;
+                ctx.beginPath();
+                ctx.moveTo(padL, y);
+                ctx.lineTo(width - padR, y);
+                ctx.stroke();
+            }
+
+            // 零位线
+            ctx.strokeStyle = "#999";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            const zeroY = padT + chartHeight * (maxValue / valueRange);
+            if (zeroY >= padT && zeroY <= padT + chartHeight) {
+                ctx.beginPath();
+                ctx.moveTo(padL, zeroY);
+                ctx.lineTo(width - padR, zeroY);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+
+            // Y轴数值标签
+            ctx.fillStyle = "#000";
+            ctx.font = "12px Arial, sans-serif";
+            ctx.textAlign = "right";
+            ctx.textBaseline = "middle";
+            for (let i = 0; i <= 5; i++) {
+                const y = padT + (chartHeight / 5) * i;
+                const value = maxValue - (i * valueRange / 5);
+                ctx.fillText(value.toFixed(0), padL - 5, y);
+            }
+
+            // 单位标签
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.fillText(unit, padL, 3);
+
+            if (curveData.length < 2) {
+                ctx.restore();
+                return;
+            }
+
+            // 曲线
+            ctx.strokeStyle = "#2196F3";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < curveData.length; i++) {
+                const x = padL + (chartWidth / (maxDataPoints - 1)) * i;
+                const normalizedY = (curveData[i] - minValue) / valueRange;
+                const y = padT + chartHeight * (1 - normalizedY);
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+
+            // 最后一个点
+            const lastPoint = curveData[curveData.length - 1];
+            const lastX = padL + (chartWidth / (maxDataPoints - 1)) * (curveData.length - 1);
+            const lastNormalizedY = (lastPoint - minValue) / valueRange;
+            const lastY = padT + chartHeight * (1 - lastNormalizedY);
+            ctx.fillStyle = "#2196F3";
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        realcurveBtn.onclick = () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+            
+            // 如果秒帧曲线正在运行，先停止秒帧曲线
+            if (isSecCurveRunning) {
+                isSecCurveRunning = false;
+                const stopSecFrame = framing(0x7030, [0x00], 1);
+                log("→ 发送停止秒帧曲线命令(功能码0x7030): " + bufToHex(stopSecFrame));
+                bleWrite(stopSecFrame);
+            }
+            
+            isCurveRunning = !isCurveRunning;
+            
+            if (isCurveRunning) {
+                realcurveBtn.textContent = "停止曲线";
+                isCurveDataReceiving = true;
+                
+                const frame = framing(0x7032, [0x01], 1);
+                log("→ 发送启动实时曲线命令(功能码0x7032): " + bufToHex(frame));
+                bleWrite(frame);
+            } else {
+                const frame = framing(0x7032, [0x00], 1);
+                log("→ 发送停止实时曲线命令(功能码0x7032): " + bufToHex(frame));
+                bleWrite(frame);
+            }
+        };
+        
+        // 秒帧曲线绘制函数
+        function drawSecCurve() {
+            if (!tempCtx || !ctx) return;
+
+            // 使用CSS尺寸（已通过setTransform做DPR缩放）
+            const sampleRect = curveCanvas.getBoundingClientRect();
+            const tempRect = tempCurveCanvas.getBoundingClientRect();
+            const sampleWidth = sampleRect.width > 0 ? sampleRect.width : BASE_SAMPLE_SIZE.w;
+            const sampleHeight = BASE_SAMPLE_SIZE.h;
+            const tempWidth = tempRect.width > 0 ? tempRect.width : BASE_TEMP_SIZE.w;
+            const tempHeight = BASE_TEMP_SIZE.h;
+            if (sampleWidth === 0 || tempWidth === 0) return;
+
+            // 采样值画布 padding
+            const sPadL = 55, sPadR = 15, sPadT = 22, sPadB = 18;
+            const sampleChartW = sampleWidth - sPadL - sPadR;
+            const sampleChartH = sampleHeight - sPadT - sPadB;
+            // 温度画布 padding
+            const tPadL = 55, tPadR = 15, tPadT = 22, tPadB = 18;
+            const tempChartW = tempWidth - tPadL - tPadR;
+            const tempChartH = tempHeight - tPadT - tPadB;
+
+            // 清空
+            ctx.save();
+            ctx.clearRect(0, 0, sampleWidth, sampleHeight);
+            tempCtx.save();
+            tempCtx.clearRect(0, 0, tempWidth, tempHeight);
+
+            // 绘制采样值曲线
+            if (secCurveSampleData.length > 0) {
+                const dataMin = Math.min(...secCurveSampleData);
+                const dataMax = Math.max(...secCurveSampleData);
+                const margin = Math.max(Math.abs(dataMax - dataMin) * 0.2, 500);
+                const minValue = Math.max(dataMin - margin, -20000);
+                const maxValue = Math.min(dataMax + margin, 20000);
+                const valueRange = maxValue - minValue;
+
+                // 网格
+                ctx.strokeStyle = "#eee";
+                ctx.lineWidth = 1;
+                for (let i = 0; i <= 5; i++) {
+                    const y = sPadT + (sampleChartH / 5) * i;
+                    ctx.beginPath();
+                    ctx.moveTo(sPadL, y);
+                    ctx.lineTo(sampleWidth - sPadR, y);
+                    ctx.stroke();
+                }
+
+                // Y轴数值标签
+                ctx.fillStyle = "#000";
+                ctx.font = "12px Arial, sans-serif";
+                ctx.textAlign = "right";
+                ctx.textBaseline = "middle";
+                for (let i = 0; i <= 5; i++) {
+                    const y = sPadT + (sampleChartH / 5) * i;
+                    const value = maxValue - (i * valueRange / 5);
+                    ctx.fillText(value.toFixed(0), sPadL - 5, y);
+                }
+
+                // 单位
+                ctx.textAlign = "left";
+                ctx.textBaseline = "top";
+                ctx.fillText("N", sPadL, 3);
+
+                // 曲线
+                const sampleN = secCurveSampleData.length;
+                ctx.strokeStyle = "#2196F3";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                for (let i = 0; i < sampleN; i++) {
+                    const x = sPadL + (sampleChartW / (sampleN - 1 || 1)) * i;
+                    const normalizedY = (secCurveSampleData[i] - minValue) / valueRange;
+                    const y = sPadT + sampleChartH * (1 - normalizedY);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            // 绘制温度曲线
+            if (secCurveTempData.length > 0) {
+                const tempMin = Math.min(...secCurveTempData);
+                const tempMax = Math.max(...secCurveTempData);
+                const tempMargin = Math.max(Math.abs(tempMax - tempMin) * 0.2, 5);
+                const tempMinVal = tempMin - tempMargin;
+                const tempMaxVal = tempMax + tempMargin;
+                const tempRange = tempMaxVal - tempMinVal;
+
+                // 网格
+                tempCtx.strokeStyle = "#eee";
+                tempCtx.lineWidth = 1;
+                for (let i = 0; i <= 5; i++) {
+                    const y = tPadT + (tempChartH / 5) * i;
+                    tempCtx.beginPath();
+                    tempCtx.moveTo(tPadL, y);
+                    tempCtx.lineTo(tempWidth - tPadR, y);
+                    tempCtx.stroke();
+                }
+
+                // Y轴数值标签
+                tempCtx.fillStyle = "#000";
+                tempCtx.font = "12px Arial, sans-serif";
+                tempCtx.textAlign = "right";
+                tempCtx.textBaseline = "middle";
+                for (let i = 0; i <= 5; i++) {
+                    const y = tPadT + (tempChartH / 5) * i;
+                    const value = tempMaxVal - (i * tempRange / 5);
+                    tempCtx.fillText(value.toFixed(1), tPadL - 5, y);
+                }
+
+                // 单位
+                tempCtx.textAlign = "left";
+                tempCtx.textBaseline = "top";
+                tempCtx.fillText("℃", tPadL, 3);
+
+                // 曲线
+                const tempN = secCurveTempData.length;
+                tempCtx.strokeStyle = "#FF5722";
+                tempCtx.lineWidth = 1.5;
+                tempCtx.beginPath();
+                for (let i = 0; i < tempN; i++) {
+                    const x = tPadL + (tempChartW / (tempN - 1 || 1)) * i;
+                    const normalizedY = (secCurveTempData[i] - tempMinVal) / tempRange;
+                    const y = tPadT + tempChartH * (1 - normalizedY);
+                    if (i === 0) tempCtx.moveTo(x, y);
+                    else tempCtx.lineTo(x, y);
+                }
+                tempCtx.stroke();
+            }
+
+            ctx.restore();
+            tempCtx.restore();
+        }
+        
+        // 秒帧曲线按钮
+        const secCurveBtn = document.getElementById("secCurveBtn");
+        secCurveBtn.onclick = () => {
+            if (!writeChar && !characteristic) {
+                log("❌ 请先连接设备");
+                return;
+            }
+
+            // 停止流程不检查格式
+            if (!isSecCurveRunning && !forceRadio.checked) {
+                showAlert("秒帧曲线仅支持力值格式，请先切换数据格式为『转换力』");
+                log("❌ 秒帧曲线：当前为电压值格式，拒绝使能");
+                return;
+            }
+
+            // 如果实时曲线正在运行，先停止实时曲线
+            if (isCurveRunning) {
+                isCurveRunning = false;
+                const stopRealTime = framing(0x7032, [0x00], 1);
+                log("→ 发送停止实时曲线命令(功能码0x7032): " + bufToHex(stopRealTime));
+                bleWrite(stopRealTime);
+            }
+            
+            isSecCurveRunning = !isSecCurveRunning;
+            log("📊 秒帧曲线：按钮点击，isSecCurveRunning = " + isSecCurveRunning);
+            
+            if (isSecCurveRunning) {
+                secCurveBtn.textContent = "停止";
+                
+                const frame = framing(0x7030, [0x01], 1);
+                log("→ 发送启动秒帧曲线命令(功能码0x7030): " + bufToHex(frame));
+                bleWrite(frame);
+            } else {
+                const frame = framing(0x7030, [0x00], 1);
+                log("→ 发送停止秒帧曲线命令(功能码0x7030): " + bufToHex(frame));
+                bleWrite(frame);
+            }
+        };
+    </script>
+</body>
+</html>
